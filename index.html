@@ -1,31 +1,116 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Auto Play Audio</title>
-    <style>
-        body {
-            background-color: black;
-            margin: 0;
-            height: 100vh;
-        }
-    </style>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Auto Play Audio (Tap to enable sound)</title>
+  <style>
+    html,body { height:100%; margin:0; }
+    body {
+      background: black;
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      color: white;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+    }
+
+    /* full-screen tap overlay */
+    #tapOverlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0,0,0,0.0); /* invisible but catches taps */
+      z-index: 9999;
+      cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    #tapOverlay .hint {
+      padding: 14px 22px;
+      border-radius: 10px;
+      background: rgba(255,255,255,0.06);
+      backdrop-filter: blur(4px);
+      color: #ddd;
+      text-align:center;
+      font-size:18px;
+      user-select:none;
+    }
+
+    /* hidden for desktop if autoplay works unmuted */
+    .hidden { display:none !important; }
+  </style>
 </head>
 <body>
-    <audio autoplay loop muted id="bgAudio">
-        <source src="sound.mp3" type="audio/mpeg">
-        Your browser does not support the audio element.
-    </audio>
+  <!-- The page is plain black otherwise -->
+  <!-- Autoplay with muted to satisfy autoplay policies where allowed -->
+  <audio id="bgAudio" autoplay loop muted playsinline>
+    <source src="sound.mp3" type="audio/mpeg">
+    Your browser does not support the audio element.
+  </audio>
 
-    <script>
-        window.addEventListener('load', () => {
-            const audio = document.getElementById('bgAudio');
-            audio.muted = false;
-            audio.play().catch(error => {
-                console.log('Autoplay was blocked:', error);
-            });
-        });
-    </script>
+  <!-- Invisible overlay that requests a tap to unmute (user gesture) -->
+  <div id="tapOverlay" title="Tap to enable sound">
+    <div class="hint">Tap anywhere to enable audio</div>
+  </div>
+
+  <script>
+    const audio = document.getElementById('bgAudio');
+    const overlay = document.getElementById('tapOverlay');
+
+    // Try to start muted autoplay (some browsers allow muted autoplay).
+    // This may succeed (muted) or be blocked. We still need user gesture to unmute.
+    function tryAutoplayMuted(){
+      audio.play().catch(e => {
+        // blocked; overlay remains visible to capture gesture
+        console.log('Muted autoplay may have been blocked or an error occurred:', e);
+      });
+    }
+
+    // Unlock/unmute on the first user gesture (click/touch/keydown)
+    function unlockAndPlay() {
+      // Unbind listeners after first use
+      window.removeEventListener('click', unlockAndPlay);
+      window.removeEventListener('touchstart', unlockAndPlay);
+      window.removeEventListener('keydown', unlockAndPlay);
+
+      // Unmute and play
+      audio.muted = false;
+      audio.play().then(() => {
+        // success: hide overlay
+        overlay.classList.add('hidden');
+      }).catch(err => {
+        console.log('Play after user gesture failed:', err);
+        // Still hide overlay so user can retry via native controls if needed
+        overlay.classList.add('hidden');
+      });
+    }
+
+    // Hide overlay automatically if the audio becomes unmuted/playing programmatically
+    function checkIfPlaying() {
+      // audio.paused === false means playing
+      if (!audio.paused && !audio.muted) {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    // If user taps the overlay it will call unlockAndPlay
+    overlay.addEventListener('click', unlockAndPlay, { once: true });
+
+    // Also listen globally for any gesture (click/touch/keydown) to unlock
+    window.addEventListener('click', unlockAndPlay, { once: true });
+    window.addEventListener('touchstart', unlockAndPlay, { once: true });
+    window.addEventListener('keydown', unlockAndPlay, { once: true });
+
+    // try muted autoplay now
+    tryAutoplayMuted();
+
+    // If audio was already playing and unmuted by browser policy (rare), hide overlay after a short wait
+    setTimeout(checkIfPlaying, 300);
+
+    // Helpful console messages
+    console.log('Page loaded. If sound is silent, tap anywhere to enable audio (required by most browsers).');
+  </script>
 </body>
 </html>
